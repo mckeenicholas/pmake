@@ -6,7 +6,9 @@ import (
 	"time"
 )
 
-func PrintOutput(rule *Rule, doneChan chan bool, start time.Time) {
+func PrintOutput(rule *Rule, doneChan chan bool, start time.Time, ruleDepth int) {
+	printDependencyTree(rule, 0, 0)
+
 	ticker := time.NewTicker(time.Second / 10)
 	defer ticker.Stop()
 
@@ -15,10 +17,30 @@ func PrintOutput(rule *Rule, doneChan chan bool, start time.Time) {
 		case <-doneChan:
 			return
 		case <-ticker.C:
-			fmt.Print("\033[H\033[2J")
 			elapsed := time.Since(start).Seconds()
-			printDependencyTree(rule, 0, int(elapsed*10))
+			fmt.Printf("\033[%dA", ruleDepth)
+			updateTimeInDependencyTree(rule, int(elapsed*10))
 		}
+	}
+}
+
+func updateTimeInDependencyTree(rule *Rule, time int) {
+	if !rule.completed {
+		rule.time = time
+	}
+
+	timeRounded := float64(rule.time) / 10
+
+	// Overwrite just the time value on each line
+	if !rule.completed {
+		fmt.Printf("%5.1fs    |\n", timeRounded)
+	} else {
+		fmt.Printf("%5.1fs ✅ |\n", timeRounded)
+	}
+
+	// Recursively update times for dependencies
+	for _, dep := range rule.dependencies {
+		updateTimeInDependencyTree(dep, time)
 	}
 }
 
@@ -37,21 +59,30 @@ func printDependencyTree(rule *Rule, level int, time int) {
 	for _, dep := range rule.dependencies {
 		printDependencyTree(dep, level+1, time)
 	}
+
+}
+
+func getRuleDepth(rule *Rule) int {
+	depth := 1
+	for _, dep := range rule.dependencies {
+		depth += getRuleDepth(dep)
+	}
+
+	return depth
 }
 
 func Make(rules map[string]*Rule, defaultRule *Rule) error {
-
-	fmt.Println(defaultRule.target)
-
 	doneChan := make(chan bool)
 	start := time.Now()
-	go PrintOutput(defaultRule, doneChan, start)
+	ruleDepth := getRuleDepth(defaultRule)
 
+	go PrintOutput(defaultRule, doneChan, start, ruleDepth)
 	defaultRule.Evaluate()
 
 	close(doneChan)
-	fmt.Print("\033[H\033[2J")
-	printDependencyTree(defaultRule, 0, 0)
+
+	fmt.Printf("\033[%dA", ruleDepth)
+	updateTimeInDependencyTree(defaultRule, 0)
 
 	return nil
 }

@@ -3,8 +3,18 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
+)
+
+type RuleStatus int
+
+const (
+	Waiting RuleStatus = iota
+	Completed
+	Cached
+	Error
 )
 
 type Rule struct {
@@ -13,7 +23,7 @@ type Rule struct {
 	actions      []*Action
 	time         int
 	phony        bool
-	completed    bool
+	Status       RuleStatus
 }
 
 func getLastModifiedTime(filePath string) (time.Time, error) {
@@ -24,14 +34,18 @@ func getLastModifiedTime(filePath string) (time.Time, error) {
 	return info.ModTime(), nil
 }
 
-func (r *Rule) executeActions() {
+func (r *Rule) executeActions() error {
 	for _, action := range r.actions {
-		action.Execute()
+		if err := action.Execute(); err != nil {
+			return fmt.Errorf("error executing action for rule %s: %s\n      %v", r.target, strings.Join(action.args, " "), err)
+		}
 	}
+	return nil
 }
 
 func (r *Rule) Evaluate() error {
 	var wg sync.WaitGroup
+	errChan := make(chan error, len(r.dependencies))
 
 	for _, subRule := range r.dependencies {
 		wg.Add(1)
@@ -39,36 +53,50 @@ func (r *Rule) Evaluate() error {
 		go func(rule *Rule) {
 			defer wg.Done()
 			if err := rule.Evaluate(); err != nil {
-				fmt.Printf("Error evaluating rule %s: %v\n", rule.target, err)
+				errChan <- fmt.Errorf("error evaluating rule %s:\n    %v", rule.target, err)
 			}
 		}(subRule)
 	}
 
 	wg.Wait()
+	close(errChan) // Close the error channel after all goroutines complete
+
+	// Check for errors from the goroutines
+	for err := range errChan {
+		if err != nil {
+			r.Status = Error
+			return err
+		}
+	}
 
 	targetModifiedTime, err := getLastModifiedTime(r.target)
-
 	if err != nil {
 		// If this returned an error, file does not exist
-		r.executeActions()
-		r.completed = true
+		if execErr := r.executeActions(); execErr != nil {
+			r.Status = Error
+			return execErr
+		}
+		r.Status = Completed
 		return nil
 	}
 
 	for _, dep := range r.dependencies {
 		depModTime, err := getLastModifiedTime(dep.target)
 		if err != nil {
+			r.Status = Error
 			return fmt.Errorf("failed to get modification time of dependency %s: %v", dep.target, err)
 		}
 
 		if depModTime.After(targetModifiedTime) {
-			r.executeActions()
-
-			r.completed = true
+			if execErr := r.executeActions(); execErr != nil {
+				r.Status = Error
+				return execErr // Return the error from executeActions
+			}
+			r.Status = Completed
 			return nil
 		}
 	}
 
-	r.completed = true
+	r.Status = Cached
 	return nil
 }

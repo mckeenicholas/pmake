@@ -36,6 +36,7 @@ func findOrCreateRule(rules map[string]*Rule, target string) *Rule {
 			target:       target,
 			dependencies: []*Rule{},
 			actions:      []*Action{},
+			Status:       Waiting,
 		}
 		rules[target] = rule
 	}
@@ -54,6 +55,11 @@ func Parse(fp *os.File) (map[string]*Rule, *Rule) {
 		switch {
 		case isComment(line):
 			continue
+		case strings.HasPrefix(line, "\t"):
+			if currentRule != nil {
+				recipe := strings.TrimSpace(line)
+				currentRule.actions = append(currentRule.actions, &Action{args: []string{recipe}})
+			}
 		case strings.Contains(line, "="):
 			parts := strings.Split(line, "=")
 			if len(parts) == 2 {
@@ -88,11 +94,6 @@ func Parse(fp *os.File) (map[string]*Rule, *Rule) {
 			// If line contains ";", anything after it is an action
 			if len(parts) > 1 {
 				recipe := strings.TrimSpace(parts[1])
-				currentRule.actions = append(currentRule.actions, &Action{args: []string{recipe}})
-			}
-		case strings.HasPrefix(line, "\t"):
-			if currentRule != nil {
-				recipe := strings.TrimSpace(line)
 				currentRule.actions = append(currentRule.actions, &Action{args: []string{recipe}})
 			}
 		}

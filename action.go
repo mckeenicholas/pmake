@@ -11,15 +11,11 @@ type Action struct {
 }
 
 func (a *Action) Execute() error {
-	if len(a.args) == 0 {
-		return fmt.Errorf("no action to execute")
-	}
 	argsString := strings.Join(a.args, " ")
-	cmd := exec.Command("sh", "-c")
-	cmd.Args = append(cmd.Args, argsString)
+	cmd := exec.Command("sh", "-c", argsString)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("execution failed: %v, output: %s", err, output)
+		return fmt.Errorf("execution failed with %v, %s", err, output)
 	}
 	return nil
 }

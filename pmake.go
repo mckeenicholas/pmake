@@ -31,13 +31,20 @@ func main() {
 
 	rules, parsedDefaultRule := Parse(file)
 
+	var ruleToEvaluate *Rule
 	if defaultRule != "" {
-		rule := rules[defaultRule]
-		Make(rules, rule)
+		ruleToEvaluate = rules[defaultRule]
 	} else {
-		Make(rules, parsedDefaultRule)
+		ruleToEvaluate = parsedDefaultRule
 	}
 
+	if err := Make(rules, ruleToEvaluate); err != nil {
+		elapsed := time.Since(start)
+		fmt.Printf("Error:\n  %v\nTerminated in %v\n", err, elapsed)
+		return
+	}
+
+	// If no error, print completion message
 	elapsed := time.Since(start)
 	fmt.Printf("Completed in %v\n", elapsed)
 }

@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-	// Define command line flags
 	var filename string
 	var defaultRule string
 
@@ -32,14 +31,10 @@ func main() {
 
 	rules, parsedDefaultRule := Parse(file)
 
-	fmt.Println(defaultRule)
-
-	// If a default rule is provided via command line, use it
 	if defaultRule != "" {
 		rule := rules[defaultRule]
 		Make(rules, rule)
 	} else {
-		// Use the parsed default rule
 		Make(rules, parsedDefaultRule)
 	}
 
